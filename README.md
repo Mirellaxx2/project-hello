@@ -62,3 +62,26 @@ A persistência de vendas depende da configuração do Supabase e das políticas
 - `npm test` — testes automatizados
 
 Build, lint e testes ainda precisam ser executados antes de considerar o projeto pronto para produção.
+
+
+## Banco de dados e LivePix
+
+A estrutura inicial está em `supabase/migrations/`. As migrações foram aplicadas ao projeto Supabase conectado. O webhook nunca confia somente no corpo recebido: consulta o pagamento diretamente à API LivePix e compara moeda e valor antes de confirmar uma venda.
+
+### Segredos das Edge Functions
+
+No painel Supabase, abra **Edge Functions → Secrets** e cadastre os seguintes valores no servidor (não no `.env.local`, no frontend ou no GitHub):
+
+- `LIVEPIX_CLIENT_ID`: ID da aplicação criada na conta LivePix.
+- `LIVEPIX_CLIENT_SECRET`: segredo privado dessa aplicação.
+- `LIVEPIX_SCOPE`: escopos OAuth autorizados na aplicação LivePix, separados por espaço. O padrão no código é `account:read wallet:read webhooks`; confirme no painel LivePix que os escopos também permitem criar e consultar pagamentos.
+- `LIVEPIX_REDIRECT_URL`: URL HTTPS para a qual o cliente volta após o checkout.
+- `APP_ORIGIN`: origem HTTPS do site publicado, para restringir CORS na função de criação de cobrança.
+
+As variáveis `SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` são disponibilizadas normalmente no ambiente das Edge Functions do Supabase. Nunca publique a chave service-role.
+
+URL de webhook para cadastrar no LivePix: `https://dnbeexvimotigwiilhmc.supabase.co/functions/v1/livepix-webhook`.
+
+Funções implantadas: `livepix-create-payment` (exige sessão autenticada) e `livepix-webhook` (entrada do provedor; verifica o pagamento consultando a API). A integração só poderá ser testada de ponta a ponta depois de cadastrar as credenciais e confirmar os escopos da aplicação LivePix.
+
+Consulte a documentação oficial: https://docs.livepix.gg/api
