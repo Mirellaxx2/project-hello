@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react";
+import { isSupabaseConfigured } from "@/lib/supabase";
+import { createSaleDraft } from "@/services/sales";
 import {
   Activity, ArrowUpRight, Bell, Boxes, CalendarDays, Check, ChevronDown,
   CircleDollarSign, ClipboardList, CreditCard, Download, ExternalLink, FileBarChart,
@@ -68,13 +70,31 @@ export default function Index() {
     window.setTimeout(() => setToast(""), 3600);
   }
 
-  function saveDraft(event: React.FormEvent<HTMLFormElement>) {
+  async function saveDraft(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSupabaseConfigured) {
+      try {
+        await createSaleDraft({
+          customer_name: saleName.trim(),
+          product_name: saleProduct.trim(),
+          amount: Number(saleValue),
+        });
+        setShowSaleModal(false);
+        setSaleName("");
+        setSaleProduct("");
+        setSaleValue("");
+        notify("Venda registrada como pagamento pendente no banco de dados.");
+        return;
+      } catch (error) {
+        notify(error instanceof Error ? error.message : "Não foi possível salvar. Confira sua sessão e as políticas do banco.");
+        return;
+      }
+    }
     setShowSaleModal(false);
     setSaleName("");
     setSaleProduct("");
     setSaleValue("");
-    notify("Rascunho preparado nesta sessão. Conecte o Supabase para salvar vendas permanentemente.");
+    notify("Rascunho preparado apenas nesta sessão. Configure o Supabase para salvar a venda permanentemente.");
   }
 
   function selectPage(label: string) {
