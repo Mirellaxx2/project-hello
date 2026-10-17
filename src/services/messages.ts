@@ -13,9 +13,15 @@ export async function listMessageTemplates() {
 
 export async function saveMessageTemplate(input: { name: string; body: string; active?: boolean }, id?: string) {
   if (!input.name.trim() || !input.body.trim()) throw new Error("Informe o nome e o conteúdo do modelo.");
-  const query = id
-    ? client().from("message_templates").update(input).eq("id", id)
-    : client().from("message_templates").insert(input);
+  const api = client();
+  let query;
+  if (id) {
+    query = api.from("message_templates").update(input).eq("id", id);
+  } else {
+    const { data: userData, error: userError } = await api.auth.getUser();
+    if (userError || !userData.user) throw new Error("Entre na sua conta antes de salvar modelos.");
+    query = api.from("message_templates").insert({ ...input, user_id: userData.user.id });
+  }
   const { data, error } = await query.select().single();
   if (error) throw error;
   return data;
