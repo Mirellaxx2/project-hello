@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signIn, signOut, getCurrentSession } from "@/services/auth";
 import { createSaleDraft } from "@/services/sales";
+import { createLivePixPayment } from "@/services/payments";
 import {
   Activity, ArrowUpRight, Bell, Boxes, CalendarDays, Check, ChevronDown,
   CircleDollarSign, ClipboardList, CreditCard, Download, ExternalLink, FileBarChart,
@@ -64,6 +65,8 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
   const [saleName, setSaleName] = useState("");
   const [saleProduct, setSaleProduct] = useState("");
   const [saleValue, setSaleValue] = useState("");
+  const [generatePix, setGeneratePix] = useState(false);
+  const [checkoutUrl, setCheckoutUrl] = useState("");
 
   const filteredNav = useMemo(() => navigation.filter((item) => item.label.toLowerCase().includes(search.toLowerCase())), [search]);
 
@@ -76,7 +79,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
     event.preventDefault();
     if (isSupabaseConfigured) {
       try {
-        await createSaleDraft({
+        const sale = await createSaleDraft({
           customer_name: saleName.trim(),
           product_name: saleProduct.trim(),
           amount: Number(saleValue),
@@ -85,7 +88,20 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         setSaleName("");
         setSaleProduct("");
         setSaleValue("");
-        notify("Venda registrada como pagamento pendente no banco de dados.");
+        if (generatePix) {
+          try {
+            const payment = await createLivePixPayment(sale.id);
+            setCheckoutUrl(payment.checkout_url);
+            notify("Venda salva e cobrança Pix criada. Use o link para enviar ao cliente.");
+          } catch (paymentError) {
+            notify(paymentError instanceof Error
+              ? "Venda salva como pendente. " + paymentError.message
+              : "Venda salva como pendente, mas a cobrança Pix não foi criada.");
+          }
+        } else {
+          notify("Venda registrada como pagamento pendente no banco de dados.");
+        }
+        setGeneratePix(false);
         return;
       } catch (error) {
         notify(error instanceof Error ? error.message : "Não foi possível salvar. Confira sua sessão e as políticas do banco.");
@@ -96,6 +112,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
     setSaleName("");
     setSaleProduct("");
     setSaleValue("");
+    setGeneratePix(false);
     notify("Rascunho preparado apenas nesta sessão. Configure o Supabase para salvar a venda permanentemente.");
   }
 
@@ -141,6 +158,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         </header>
 
         <div className="page-content">
+          {checkoutUrl && <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "12px", marginBottom: "18px", padding: "14px 16px", border: "1px solid #7c3f61", borderRadius: "14px", background: "#24131f", color: "#f8f4f8" }}><span style={{ flex: 1, minWidth: "180px" }}>Cobrança Pix pronta para compartilhar com o cliente.</span><a href={checkoutUrl} target="_blank" rel="noreferrer" style={{ color: "#f9a8d4", fontWeight: 700 }}>Abrir checkout LivePix ↗</a><button type="button" onClick={() => { void navigator.clipboard.writeText(checkoutUrl); notify("Link da cobrança copiado."); }} style={{ border: "1px solid #6b3656", borderRadius: "8px", padding: "8px 10px", background: "transparent", color: "inherit", cursor: "pointer" }}>Copiar link</button><button type="button" aria-label="Fechar aviso da cobrança" onClick={() => setCheckoutUrl("")} style={{ border: 0, background: "transparent", color: "inherit", cursor: "pointer" }}>×</button></div>}
           {active === "Dashboard" ? (
             <>
               <div className="welcome-row">
@@ -166,7 +184,7 @@ function Dashboard({ onSignOut }: { onSignOut: () => void }) {
         </div>
       </main>
 
-      {showSaleModal && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowSaleModal(false); }}><section className="sale-modal" role="dialog" aria-modal="true" aria-labelledby="sale-title"><div className="modal-top"><div className="modal-icon"><Plus size={20} /></div><button className="icon-button" onClick={() => setShowSaleModal(false)} aria-label="Fechar"><X size={19} /></button></div><h2 id="sale-title">Preparar nova venda</h2><p>Preencha os dados para preparar um rascunho. Nenhum pagamento será confirmado por esta tela.</p><form onSubmit={saveDraft}><label>Nome do cliente<input value={saleName} onChange={(e) => setSaleName(e.target.value)} placeholder="Ex.: Maria Silva" required /></label><label>Produto ou serviço<input value={saleProduct} onChange={(e) => setSaleProduct(e.target.value)} placeholder="Ex.: Produto personalizado" required /></label><label>Valor (R$)<input type="number" min="0.01" step="0.01" value={saleValue} onChange={(e) => setSaleValue(e.target.value)} placeholder="0,00" required /></label><div className="modal-note"><ShieldCheck size={16} /><span>Este rascunho não será salvo no banco até a integração com Supabase ser configurada.</span></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowSaleModal(false)}>Cancelar</button><button type="submit" className="primary-button"><Check size={16} /> Preparar rascunho</button></div></form></section></div>}
+      {showSaleModal && <div className="modal-backdrop" role="presentation" onMouseDown={(e) => { if (e.target === e.currentTarget) setShowSaleModal(false); }}><section className="sale-modal" role="dialog" aria-modal="true" aria-labelledby="sale-title"><div className="modal-top"><div className="modal-icon"><Plus size={20} /></div><button className="icon-button" onClick={() => setShowSaleModal(false)} aria-label="Fechar"><X size={19} /></button></div><h2 id="sale-title">Preparar nova venda</h2><p>Preencha os dados para preparar um rascunho. Nenhum pagamento será confirmado por esta tela.</p><form onSubmit={saveDraft}><label>Nome do cliente<input value={saleName} onChange={(e) => setSaleName(e.target.value)} placeholder="Ex.: Maria Silva" required /></label><label>Produto ou serviço<input value={saleProduct} onChange={(e) => setSaleProduct(e.target.value)} placeholder="Ex.: Produto personalizado" required /></label><label>Valor (R$)<input type="number" min="0.01" step="0.01" value={saleValue} onChange={(e) => setSaleValue(e.target.value)} placeholder="0,00" required /></label><label style={{ display: "flex", alignItems: "center", gap: "10px", padding: "10px 0", color: "#e7dce7", fontSize: "13px" }}><input type="checkbox" checked={generatePix} onChange={(e) => setGeneratePix(e.target.checked)} /> Gerar cobrança LivePix para esta venda</label><div className="modal-note"><ShieldCheck size={16} /><span>A venda ficará pendente. O pagamento só será confirmado após validação pelo servidor.</span></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setShowSaleModal(false)}>Cancelar</button><button type="submit" className="primary-button"><Check size={16} /> Preparar rascunho</button></div></form></section></div>}
       {toast && <div className="toast"><Check size={17} /><span>{toast}</span><button onClick={() => setToast("")} aria-label="Fechar aviso"><X size={15} /></button></div>}
     </div>
   );
