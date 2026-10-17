@@ -30,7 +30,7 @@ export async function getReportSummary(fromIso: string, toIso: string): Promise<
 
 export function exportRowsToCsv(filename: string, rows: Record<string, unknown>[]) {
   if (!rows.length) throw new Error("Não há dados para exportar.");
-  const headers = Object.keys(rows[0]);
+  const headers = Object.keys(rows[0] ?? {});
   const escapeCell = (value: unknown) => {
     const str = String(value ?? "");
     return `"${str.replace(/"/g, '""')}"`;
