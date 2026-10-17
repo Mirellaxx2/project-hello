@@ -24,9 +24,15 @@ export async function listProducts() {
 
 export async function saveProduct(input: ProductInput, id?: string) {
   if (!Number.isFinite(input.price) || input.price < 0) throw new Error("Preço inválido.");
-  const query = id
-    ? client().from("products").update(input).eq("id", id)
-    : client().from("products").insert(input);
+  const api = client();
+  let query;
+  if (id) {
+    query = api.from("products").update(input).eq("id", id);
+  } else {
+    const { data: userData, error: userError } = await api.auth.getUser();
+    if (userError || !userData.user) throw new Error("Entre na sua conta antes de cadastrar produtos.");
+    query = api.from("products").insert({ ...input, user_id: userData.user.id });
+  }
   const { data, error } = await query.select().single();
   if (error) throw error;
   return data;
