@@ -44,3 +44,20 @@ A interface inclui dashboard responsivo, navegação entre seções, estados vaz
 - \`npm run build\` — build de produção
 - \`npm run lint\` — análise estática
 - \`npm test\` — testes automatizados
+
+
+## Backend scaffolding added
+
+The `supabase/` directory contains an initial PostgreSQL schema with RLS, a local Supabase configuration, and guarded Edge Function placeholders. The `src/lib` and `src/services` directories contain Supabase setup, auth helpers, CRUD/query services, realtime subscriptions, report helpers, formatting, and delivery/message workflows.
+
+### Connect Supabase
+
+1. Create a Supabase project.
+2. Copy `.env.example` to `.env.local` and fill in the project URL and public anon/publishable key.
+3. Install dependencies with `npm install`.
+4. Apply the migration after reviewing it: `supabase db push` for a linked project, or `supabase db reset` for local development.
+5. Enable and test authentication, then sign in before creating records.
+
+### Not yet production-ready
+
+The Live Pix webhook and message-sending Edge Functions intentionally return HTTP 501 until their official provider adapters are implemented and verified. They do not confirm payments or send messages. The remaining UI sections are scaffolds; complete CRUD pages, auth screens/route guards, provider-specific integration, and automated tests still need to be finished.
