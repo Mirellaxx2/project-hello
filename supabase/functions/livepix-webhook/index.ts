@@ -1,6 +1,30 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const corsHeaders = { "Content-Type": "application/json" };
+// LivePix tokens last ~1h; reuse across warm invocations and refresh 60s early.
+const LIVEPIX_DEFAULT_SCOPE = "payments:read payments:write account:read";
+let cachedToken: { accessToken: string; expiresAt: number } | null = null;
+
+async function getLivePixAccessToken(clientId: string, clientSecret: string): Promise<string | null> {
+  const now = Date.now();
+  if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.accessToken;
+  const scope = Deno.env.get("LIVEPIX_SCOPE") ?? LIVEPIX_DEFAULT_SCOPE;
+  const tokenResponse = await fetch("https://oauth.livepix.gg/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret, scope }),
+  });
+  const tokenJson = await tokenResponse.json();
+  if (!tokenResponse.ok || typeof tokenJson.access_token !== "string") {
+    console.error("LivePix webhook verification OAuth failed", tokenResponse.status);
+    return null;
+  }
+  const expiresIn = Number(tokenJson.expires_in);
+  const ttlMs = Number.isFinite(expiresIn) && expiresIn > 120 ? expiresIn * 1000 : 3_600_000;
+  cachedToken = { accessToken: tokenJson.access_token, expiresAt: now + ttlMs };
+  return cachedToken.accessToken;
+}
+
 function reply(status: number, body: Record<string, unknown>) {
   return new Response(JSON.stringify(body), { status, headers: corsHeaders });
 }
