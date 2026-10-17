@@ -8,26 +8,47 @@ const corsHeaders = {
 };
 // LivePix tokens last ~1h; reuse across warm invocations and refresh 60s early.
 // LivePix warns that excessive token issuance can lead to account termination.
-const LIVEPIX_DEFAULT_SCOPE = "payments:read payments:write account:read";
+// Cache layers: in-memory (warm instance) -> livepix_tokens table (survives
+// restarts and is shared across instances) -> new OAuth request as last resort.
+const LIVEPIX_DEFAULT_SCOPE = "payments:write payments:read account:read webhooks";
+const TOKEN_REFRESH_MARGIN_MS = 60_000;
 let cachedToken: { accessToken: string; expiresAt: number } | null = null;
 
-async function getLivePixAccessToken(clientId: string, clientSecret: string): Promise<string | null> {
+async function getLivePixAccessToken(
+  admin: ReturnType<typeof createClient>,
+  clientId: string,
+  clientSecret: string,
+): Promise<string | null> {
   const now = Date.now();
-  if (cachedToken && cachedToken.expiresAt > now + 60_000) return cachedToken.accessToken;
+  if (cachedToken && cachedToken.expiresAt > now + TOKEN_REFRESH_MARGIN_MS) return cachedToken.accessToken;
+
+  // Persistent cache: valid token stored by this or another instance.
+  const { data: stored } = await admin.from("livepix_tokens").select("access_token,expires_at").eq("id", true).maybeSingle();
+  const storedExpiresAt = stored?.expires_at ? Date.parse(stored.expires_at) : 0;
+  if (stored?.access_token && storedExpiresAt > now + TOKEN_REFRESH_MARGIN_MS) {
+    cachedToken = { accessToken: stored.access_token, expiresAt: storedExpiresAt };
+    return cachedToken.accessToken;
+  }
+
   const scope = Deno.env.get("LIVEPIX_SCOPE") ?? LIVEPIX_DEFAULT_SCOPE;
   const tokenResponse = await fetch("https://oauth.livepix.gg/oauth2/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret, scope }),
   });
-  const tokenJson = await tokenResponse.json();
-  if (!tokenResponse.ok || typeof tokenJson.access_token !== "string") {
+  const tokenJson = await tokenResponse.json().catch(() => null);
+  if (!tokenResponse.ok || typeof tokenJson?.access_token !== "string") {
     console.error("LivePix OAuth failed", tokenResponse.status);
     return null;
   }
   const expiresIn = Number(tokenJson.expires_in);
   const ttlMs = Number.isFinite(expiresIn) && expiresIn > 120 ? expiresIn * 1000 : 3_600_000;
-  cachedToken = { accessToken: tokenJson.access_token, expiresAt: now + ttlMs };
+  const expiresAt = now + ttlMs;
+  cachedToken = { accessToken: tokenJson.access_token, expiresAt };
+  const { error: cacheError } = await admin.from("livepix_tokens").upsert({
+    id: true, access_token: tokenJson.access_token, expires_at: new Date(expiresAt).toISOString(), updated_at: new Date().toISOString(),
+  }, { onConflict: "id" });
+  if (cacheError) console.error("Could not persist LivePix token cache", cacheError.message);
   return cachedToken.accessToken;
 }
 
