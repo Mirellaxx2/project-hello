@@ -19,10 +19,14 @@ export async function createSaleDraft(input: SaleDraft) {
     throw new Error("Informe um valor maior que zero.");
   }
 
+  const { data: userResult, error: userError } = await supabase.auth.getUser();
+  if (userError || !userResult.user) throw new Error("Entre na sua conta antes de registrar uma venda.");
+
   const { data, error } = await supabase
     .from("sales")
     .insert({
       ...input,
+      user_id: userResult.user.id,
       currency: "BRL",
       payment_status: "pending",
       delivery_status: "pending",
