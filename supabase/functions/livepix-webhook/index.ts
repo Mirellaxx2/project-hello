@@ -48,20 +48,14 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
-    const tokenResponse = await fetch("https://oauth.livepix.gg/oauth2/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret, scope }),
-    });
-    const tokenJson = await tokenResponse.json();
-    if (!tokenResponse.ok || typeof tokenJson.access_token !== "string") {
-      console.error("LivePix webhook verification OAuth failed", tokenResponse.status);
+    const accessToken = await getLivePixAccessToken(clientId, clientSecret);
+    if (!accessToken) {
       return reply(503, { error: "Não foi possível validar o evento com o LivePix." });
     }
 
     // Treat the webhook as a notification only. Fetch payment details directly from LivePix.
     const verifiedResponse = await fetch(`https://api.livepix.gg/v2/payments/${encodeURIComponent(resourceId)}`, {
-      headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
     const verifiedJson = await verifiedResponse.json();
     const payment = verifiedJson?.data;
