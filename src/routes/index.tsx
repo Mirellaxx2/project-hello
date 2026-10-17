@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
 import { supabase, isSupabaseConfigured } from "@/lib/supabase";
 import { signIn, signOut, getCurrentSession } from "@/services/auth";
 import { createSaleDraft } from "@/services/sales";
@@ -271,3 +272,10 @@ export default function Index() {
     </main>
   );
 }
+
+
+// Register the root page with TanStack Router. Without this export, the generated
+// route tree imports an undefined route and the preview falls through to 404.
+export const Route = createFileRoute("/")({
+  component: Index,
+});
