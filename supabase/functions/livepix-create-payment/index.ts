@@ -74,7 +74,7 @@ Deno.serve(async (req: Request) => {
     }
     const paymentResponse = await fetch("https://api.livepix.gg/v2/payments", {
       method: "POST",
-      headers: { Authorization: `Bearer ${tokenJson.access_token}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: JSON.stringify({ amount: Math.round(Number(sale.amount) * 100), currency: "BRL", redirectUrl }),
     });
     const paymentJson = await paymentResponse.json();

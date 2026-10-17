@@ -35,7 +35,6 @@ Deno.serve(async (req: Request) => {
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const clientId = Deno.env.get("LIVEPIX_CLIENT_ID");
   const clientSecret = Deno.env.get("LIVEPIX_CLIENT_SECRET");
-  const scope = Deno.env.get("LIVEPIX_SCOPE") ?? "account:read wallet:read webhooks";
   if (!supabaseUrl || !serviceKey || !clientId || !clientSecret) {
     return reply(503, { error: "LivePix não está configurado no servidor." });
   }
