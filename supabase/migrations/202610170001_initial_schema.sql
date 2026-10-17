@@ -77,6 +77,35 @@ create index if not exists sales_user_created_idx on public.sales(user_id, creat
 create index if not exists sales_user_payment_idx on public.sales(user_id, payment_status, paid_at desc);
 create index if not exists sales_user_delivery_idx on public.sales(user_id, delivery_status);
 
+-- Prevent authenticated browser sessions from forging payment confirmation.
+-- Only a trusted server-side service role may change payment status/provider fields.
+create or replace function public.guard_payment_confirmation()
+returns trigger language plpgsql as $
+begin
+  if auth.role() = 'authenticated' then
+    if tg_op = 'INSERT' and (
+      new.payment_status <> 'pending' or new.paid_at is not null or
+      new.provider_transaction_id is not null or new.payment_provider is not null
+    ) then
+      raise exception 'Payment confirmation must come from the trusted payment backend';
+    end if;
+    if tg_op = 'UPDATE' and (
+      new.payment_status is distinct from old.payment_status or
+      new.paid_at is distinct from old.paid_at or
+      new.provider_transaction_id is distinct from old.provider_transaction_id or
+      new.payment_provider is distinct from old.payment_provider
+    ) then
+      raise exception 'Payment confirmation must come from the trusted payment backend';
+    end if;
+  end if;
+  return new;
+end;
+$;
+drop trigger if exists guard_payment_confirmation on public.sales;
+create trigger guard_payment_confirmation
+before insert or update on public.sales
+for each row execute function public.guard_payment_confirmation();
+
 create table if not exists public.payment_events (
   id uuid primary key default gen_random_uuid(),
   provider text not null,
