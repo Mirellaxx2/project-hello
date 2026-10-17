@@ -80,7 +80,7 @@ create index if not exists sales_user_delivery_idx on public.sales(user_id, deli
 -- Prevent authenticated browser sessions from forging payment confirmation.
 -- Only a trusted server-side service role may change payment status/provider fields.
 create or replace function public.guard_payment_confirmation()
-returns trigger language plpgsql as $
+returns trigger language plpgsql as $$
 begin
   if auth.role() = 'authenticated' then
     if tg_op = 'INSERT' and (
@@ -100,7 +100,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 drop trigger if exists guard_payment_confirmation on public.sales;
 create trigger guard_payment_confirmation
 before insert or update on public.sales
