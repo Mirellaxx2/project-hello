@@ -44,7 +44,6 @@ Deno.serve(async (req: Request) => {
   const clientId = Deno.env.get("LIVEPIX_CLIENT_ID");
   const clientSecret = Deno.env.get("LIVEPIX_CLIENT_SECRET");
   const redirectUrl = Deno.env.get("LIVEPIX_REDIRECT_URL");
-  const scope = Deno.env.get("LIVEPIX_SCOPE") ?? "account:read wallet:read webhooks";
   if (!supabaseUrl || !serviceKey || !clientId || !clientSecret || !redirectUrl) {
     return reply(503, { error: "LivePix ainda não está configurado no servidor. Cadastre os secrets necessários." });
   }
@@ -69,14 +68,8 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const tokenResponse = await fetch("https://oauth.livepix.gg/oauth2/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ grant_type: "client_credentials", client_id: clientId, client_secret: clientSecret, scope }),
-    });
-    const tokenJson = await tokenResponse.json();
-    if (!tokenResponse.ok || typeof tokenJson.access_token !== "string") {
-      console.error("LivePix OAuth failed", tokenResponse.status);
+    const accessToken = await getLivePixAccessToken(clientId, clientSecret);
+    if (!accessToken) {
       return reply(502, { error: "Não foi possível autenticar com o LivePix. Confira credenciais e permissões." });
     }
     const paymentResponse = await fetch("https://api.livepix.gg/v2/payments", {
