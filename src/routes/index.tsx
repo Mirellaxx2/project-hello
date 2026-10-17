@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
-import { isSupabaseConfigured } from "@/lib/supabase";
+import { useEffect, useMemo, useState } from "react";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase";
+import { signIn, signOut, getCurrentSession } from "@/services/auth";
 import { createSaleDraft } from "@/services/sales";
 import {
   Activity, ArrowUpRight, Bell, Boxes, CalendarDays, Check, ChevronDown,
@@ -52,7 +53,7 @@ function EmptyState({ title, description, icon: Icon = ClipboardList }: { title:
   );
 }
 
-export default function Index() {
+function Dashboard({ onSignOut }: { onSignOut: () => void }) {
   const [active, setActive] = useState<Section>("Dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -127,7 +128,7 @@ export default function Index() {
         </nav>
         <div className="sidebar-bottom">
           <div className="support-card"><div className="support-icon"><Headphones size={17} /></div><strong>Precisa de ajuda?</strong><p>Veja como configurar sua loja.</p><button onClick={() => notify("Central de ajuda: configure primeiro as integrações em Configurações.")}>Acessar central <ExternalLink size={13} /></button></div>
-          <button className="nav-item logout-item" onClick={() => notify("A autenticação será ativada quando o Supabase Auth for configurado.")}><LifeBuoy size={18} /><span>Sessão e acesso</span></button>
+          <button className="nav-item logout-item" onClick={onSignOut}><LifeBuoy size={18} /><span>Sessão e acesso</span></button>
           <div className="profile-row"><div className="profile-avatar">M</div><div className="profile-info"><strong>Proprietária</strong><span>Shop Mih</span></div><button className="icon-button" aria-label="Opções do perfil" onClick={() => selectPage("Configurações")}><Settings size={17} /></button></div>
         </div>
       </aside>
@@ -180,5 +181,93 @@ function PageSection({ active, onNotify, onCreate }: { active: Section; onNotify
       {active === "Live Pix" ? <div className="integration-detail panel"><div className="integration-detail-icon"><Zap size={24} /></div><div className="integration-detail-main"><span className="connection-pill"><i /> Não conectado</span><h2>Conexão com Live Pix</h2><p>A integração precisa ser feita no servidor para proteger suas credenciais. Nenhum pagamento será marcado como confirmado sem validação real do evento.</p><div className="setup-steps"><div><span>01</span><div><strong>Configurar credenciais no backend</strong><small>Use variáveis de ambiente seguras; nunca coloque tokens no navegador.</small></div></div><div><span>02</span><div><strong>Configurar webhook oficial</strong><small>Validar assinatura e rejeitar eventos inválidos ou repetidos.</small></div></div><div><span>03</span><div><strong>Testar antes de produção</strong><small>Confirmar a integração com eventos de teste suportados pelo provedor.</small></div></div></div><button className="primary-button" onClick={() => onNotify("Para ativar o Live Pix, configure as credenciais e o webhook no backend primeiro.")}>Ver requisitos <ArrowUpRight size={16} /></button></div><div className="integration-side"><div><ShieldCheck size={20} /><strong>Validação segura</strong><span>Confirmação no servidor</span></div><div><Activity size={20} /><strong>Eventos em tempo real</strong><span>Após configurar o webhook</span></div><div><Check size={20} /><strong>Proteção contra duplicidade</strong><span>Idempotência por transação</span></div></div></div> : active === "Configurações" ? <div className="settings-grid"><div className="panel settings-panel"><div className="settings-title"><div className="quick-icon pink-bg"><ShieldCheck size={19} /></div><div><h2>Integrações e segurança</h2><p>Conexões necessárias para operar em produção</p></div></div>{[{name:"Supabase Auth + PostgreSQL",desc:"Login, banco de dados e políticas de acesso",state:"Pendente"},{name:"Live Pix",desc:"Eventos oficiais e validação de pagamentos",state:"Pendente"},{name:"Mensagens oficiais",desc:"WhatsApp Business Platform ou canal escolhido",state:"Pendente"},{name:"Realtime",desc:"Atualização instantânea de notificações e painel",state:"Pendente"}].map((item) => <div className="setting-line" key={item.name}><div><strong>{item.name}</strong><span>{item.desc}</span></div><span className="pending-tag">{item.state}</span></div>)}</div><div className="panel security-note"><div className="security-shield"><ShieldCheck size={23} /></div><h2>Segurança em primeiro lugar</h2><p>Não compartilhe chaves secretas no frontend. Configure segredos apenas no backend e ative políticas RLS antes de armazenar dados de clientes.</p><button className="secondary-button" onClick={() => onNotify("Checklist de segurança exibido. A configuração técnica ainda precisa ser feita.")}> <ShieldCheck size={15} /> Revisar checklist</button></div></div> : <div className="panel generic-empty"><EmptyState title={active === "Notificações" ? "Tudo tranquilo por aqui" : "Nenhum registro encontrado"} description={copy.empty} icon={Icon} />{active === "Mensagens automáticas" && <button className="secondary-button" onClick={() => onNotify("O envio automático será ativado após configurar o provedor oficial e o consentimento do contato.")}>Ver requisitos de envio <ArrowUpRight size={15} /></button>}{active === "Relatórios" && <button className="secondary-button" onClick={() => onNotify("Não é possível exportar relatórios sem dados reais no banco.")}><Download size={15} /> Exportar CSV</button>}</div>}
       <div className="subpage-footnote"><ShieldCheck size={15} /> O painel não utiliza transações fictícias. Integrações e dados persistentes ainda precisam ser configurados.</div>
     </div>
+  );
+}
+
+
+/** Login gate: the dashboard is rendered only after Supabase confirms a session. */
+export default function Index() {
+  const [session, setSession] = useState<any>(null);
+  const [checkingSession, setCheckingSession] = useState(true);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    if (!supabase) {
+      setCheckingSession(false);
+      return;
+    }
+    getCurrentSession()
+      .then((current) => { if (mounted) setSession(current); })
+      .catch(() => { if (mounted) setSession(null); })
+      .finally(() => { if (mounted) setCheckingSession(false); });
+    const { data } = supabase.auth.onAuthStateChange((_event, current) => {
+      if (mounted) setSession(current);
+    });
+    return () => {
+      mounted = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setErrorMessage("");
+    setSubmitting(true);
+    try {
+      await signIn(email.trim(), password);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Não foi possível entrar. Confira seu e-mail e senha.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleSignOut() {
+    try {
+      await signOut();
+      setSession(null);
+    } catch {
+      setErrorMessage("Não foi possível encerrar a sessão. Tente novamente.");
+    }
+  }
+
+  if (checkingSession) {
+    return <div style={{ minHeight: "100vh", display: "grid", placeItems: "center", background: "#0b090d", color: "#f8f4f8", fontFamily: "Inter, system-ui, sans-serif" }}>Carregando acesso seguro…</div>;
+  }
+
+  if (session) return <Dashboard onSignOut={handleSignOut} />;
+
+  return (
+    <main style={{ minHeight: "100vh", display: "grid", placeItems: "center", padding: "24px", background: "radial-gradient(ellipse at top, #321326 0%, #100b12 42%, #08070a 100%)", color: "#f8f4f8", fontFamily: "Inter, system-ui, sans-serif" }}>
+      <section style={{ width: "100%", maxWidth: "420px", boxSizing: "border-box", padding: "36px", border: "1px solid #382334", borderRadius: "24px", background: "rgba(20, 14, 22, .96)", boxShadow: "0 24px 80px rgba(0,0,0,.38)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "30px" }}>
+          <div style={{ width: "46px", height: "46px", display: "grid", placeItems: "center", borderRadius: "14px", background: "linear-gradient(135deg, #f472b6, #be185d)", color: "#fff", fontWeight: 900, fontSize: "22px" }}>M</div>
+          <div><div style={{ fontSize: "22px", fontWeight: 800, letterSpacing: "-.7px" }}>vendas <span style={{ color: "#f472b6" }}>mih</span></div><div style={{ marginTop: "3px", color: "#a99aa8", fontSize: "10px", letterSpacing: "2px" }}>ACESSO DA PROPRIETÁRIA</div></div>
+        </div>
+        <h1 style={{ margin: "0 0 8px", fontSize: "26px", letterSpacing: "-.6px" }}>Entre na sua conta</h1>
+        <p style={{ margin: "0 0 26px", color: "#b8aab8", fontSize: "14px", lineHeight: 1.6 }}>Faça login para acessar seu painel de vendas e informações da Shop Mih.</p>
+        {!isSupabaseConfigured ? (
+          <div style={{ padding: "14px", borderRadius: "12px", border: "1px solid #7c3f61", background: "#2a1424", color: "#f9a8d4", fontSize: "13px", lineHeight: 1.6 }}>
+            O login está bloqueado até configurar o Supabase. Defina <code>VITE_SUPABASE_URL</code> e <code>VITE_SUPABASE_ANON_KEY</code> nas variáveis de ambiente do site e habilite o Supabase Auth.
+          </div>
+        ) : (
+          <form onSubmit={handleLogin} style={{ display: "grid", gap: "16px" }}>
+            <label style={{ display: "grid", gap: "8px", color: "#e7dce7", fontSize: "13px", fontWeight: 600 }}>E-mail
+              <input required type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="voce@exemplo.com" style={{ width: "100%", boxSizing: "border-box", padding: "13px 14px", border: "1px solid #493448", borderRadius: "10px", background: "#100c12", color: "#fff", outlineColor: "#f472b6" }} />
+            </label>
+            <label style={{ display: "grid", gap: "8px", color: "#e7dce7", fontSize: "13px", fontWeight: 600 }}>Senha
+              <input required type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Sua senha" style={{ width: "100%", boxSizing: "border-box", padding: "13px 14px", border: "1px solid #493448", borderRadius: "10px", background: "#100c12", color: "#fff", outlineColor: "#f472b6" }} />
+            </label>
+            {errorMessage && <p role="alert" style={{ margin: 0, color: "#fda4af", fontSize: "13px", lineHeight: 1.5 }}>{errorMessage}</p>}
+            <button disabled={submitting} type="submit" style={{ marginTop: "4px", padding: "14px", border: 0, borderRadius: "10px", background: submitting ? "#8c3d68" : "linear-gradient(90deg, #db2777, #ec4899)", color: "white", fontSize: "14px", fontWeight: 800, cursor: submitting ? "wait" : "pointer" }}>{submitting ? "Entrando…" : "Entrar no painel"}</button>
+          </form>
+        )}
+        <div style={{ marginTop: "24px", paddingTop: "18px", borderTop: "1px solid #30232f", color: "#958695", fontSize: "11px", lineHeight: 1.6 }}>Área restrita. O cadastro público não está disponível; crie/autorize usuários pelo painel de autenticação do Supabase.</div>
+      </section>
+    </main>
   );
 }
