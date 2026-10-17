@@ -69,7 +69,7 @@ Deno.serve(async (req: Request) => {
 
   const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
   try {
-    const accessToken = await getLivePixAccessToken(clientId, clientSecret);
+    const accessToken = await getLivePixAccessToken(admin, clientId, clientSecret);
     if (!accessToken) {
       return reply(503, { error: "Não foi possível validar o evento com o LivePix." });
     }
