@@ -1,10 +1,9 @@
 import { useMemo, useState } from "react";
 import {
-  Activity, ArrowDownRight, ArrowUpRight, Bell, Boxes, CalendarDays, Check,
-  ChevronDown, CircleDollarSign, ClipboardList, CreditCard, Download, ExternalLink,
-  FileBarChart, Filter, Headphones, LayoutDashboard, LifeBuoy, Menu, MessageCircle,
-  Package, Plus, Search, Settings, ShieldCheck, ShoppingBag, Smartphone, Sparkles,
-  Users, Wallet, X, Zap
+  Activity, ArrowUpRight, Bell, Boxes, CalendarDays, Check, ChevronDown,
+  CircleDollarSign, ClipboardList, CreditCard, Download, ExternalLink, FileBarChart,
+  Headphones, LayoutDashboard, LifeBuoy, Menu, MessageCircle, Package, Plus, Search,
+  Settings, ShieldCheck, ShoppingBag, Sparkles, Users, Wallet, X, Zap
 } from "lucide-react";
 
 type Section = "Dashboard" | "Vendas" | "Live Pix" | "Notificações" | "Clientes" | "Produtos" | "Entregas" | "Mensagens automáticas" | "Relatórios" | "Configurações";
